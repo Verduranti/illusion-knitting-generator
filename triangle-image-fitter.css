@@ -1,0 +1,265 @@
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --accent: #e94560;
+  --accent2: #0f3460;
+  --text: #eee;
+  --text-muted: #8899aa;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+}
+
+h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.4rem;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, var(--accent), #ff8a80);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-bottom: 36px;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+.container {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ── Drop zone ─────────────────────────────────────────────────────────────── */
+.drop-zone {
+  width: 100%;
+  border: 2px dashed var(--accent2);
+  border-radius: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.3s ease, background 0.3s ease;
+  background: rgba(15, 52, 96, 0.15);
+  position: relative;
+}
+
+.drop-zone:hover,
+.drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(233, 69, 96, 0.06);
+}
+
+.drop-zone svg {
+  width: 48px;
+  height: 48px;
+  fill: var(--accent2);
+  margin-bottom: 12px;
+  transition: fill 0.3s;
+}
+
+.drop-zone:hover svg {
+  fill: var(--accent);
+}
+
+.drop-zone p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.drop-zone p strong {
+  color: var(--text);
+}
+
+#fileInput {
+  display: none;
+}
+
+/* ── Controls ──────────────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  padding: 10px 16px;
+  border-radius: 10px;
+}
+
+.control-group label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+select,
+input[type="number"] {
+  background: var(--bg);
+  border: 1px solid var(--accent2);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+input[type="number"] {
+  width: 70px;
+  text-align: center;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────────── */
+button {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #d63050;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+.btn-secondary {
+  background: var(--accent2);
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  background: #1a4a80;
+}
+
+/* ── Triangle direction picker ─────────────────────────────────────────────── */
+.triangle-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tri-option {
+  width: 52px;
+  height: 52px;
+  border: 2px solid var(--accent2);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s, background 0.2s;
+  background: transparent;
+  padding: 0;
+}
+
+.tri-option:hover,
+.tri-option.active {
+  border-color: var(--accent);
+}
+
+.tri-option.active {
+  background: rgba(233, 69, 96, 0.12);
+}
+
+.tri-option svg {
+  width: 30px;
+  height: 30px;
+}
+
+/* SVG polygon stroke driven entirely by CSS — no JS colour manipulation needed */
+.tri-option svg polygon {
+  stroke: var(--text-muted);
+  transition: stroke 0.2s;
+}
+
+.tri-option:hover svg polygon,
+.tri-option.active svg polygon {
+  stroke: var(--accent);
+}
+
+/* ── Preview ───────────────────────────────────────────────────────────────── */
+.preview-area {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+
+.preview-card {
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  flex: 1;
+  min-width: 280px;
+  max-width: 460px;
+}
+
+.preview-card h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.preview-card canvas,
+.preview-card img {
+  max-width: 100%;
+  border-radius: 8px;
+  /* Checkerboard shows transparency */
+  background: repeating-conic-gradient(#2a2a4a 0% 25%, #222244 0% 50%) 50% / 16px 16px;
+}
+
+.info-bar {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}

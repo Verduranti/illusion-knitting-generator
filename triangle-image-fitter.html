@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Triangle Image Fitter</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="triangle-image-fitter.css">
+</head>
+<body>
+
+<h1>▲ Triangle Image Fitter</h1>
+<p class="subtitle">Clip images to a triangle shape &amp; resize to 451px on the long side</p>
+
+<div class="container">
+
+  <div class="drop-zone" id="dropZone">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994
+               5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24
+               5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+    </svg>
+    <p><strong>Drop an image here</strong> or click to browse</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Triangle Direction</label>
+      <div class="triangle-options" id="triOptions">
+
+        <button class="tri-option active" data-dir="up" title="Point Up" type="button">
+          <svg viewBox="0 0 30 30" aria-hidden="true">
+            <polygon points="15,4 28,26 2,26" fill="none" stroke-width="2"/>
+          </svg>
+        </button>
+
+        <button class="tri-option" data-dir="down" title="Point Down" type="button">
+          <svg viewBox="0 0 30 30" aria-hidden="true">
+            <polygon points="15,26 28,4 2,4" fill="none" stroke-width="2"/>
+          </svg>
+        </button>
+
+        <button class="tri-option" data-dir="left" title="Point Left" type="button">
+          <svg viewBox="0 0 30 30" aria-hidden="true">
+            <polygon points="4,15 26,2 26,28" fill="none" stroke-width="2"/>
+          </svg>
+        </button>
+
+        <button class="tri-option" data-dir="right" title="Point Right" type="button">
+          <svg viewBox="0 0 30 30" aria-hidden="true">
+            <polygon points="26,15 4,2 4,28" fill="none" stroke-width="2"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label for="maxSize">Long side</label>
+      <input type="number" id="maxSize" value="451" min="10" max="4000"> px
+    </div>
+
+    <button class="btn-primary" id="processBtn" disabled type="button">
+      Process Image
+    </button>
+  </div>
+
+  <div class="preview-area hidden" id="previewArea">
+    <div class="preview-card">
+      <h3>Original</h3>
+      <img id="originalPreview" alt="Original image preview">
+      <div class="info-bar" id="originalInfo"></div>
+    </div>
+    <div class="preview-card">
+      <h3>Triangle Result</h3>
+      <canvas id="resultCanvas"></canvas>
+      <div class="info-bar" id="resultInfo"></div>
+    </div>
+  </div>
+
+  <div class="controls hidden" id="downloadArea">
+    <button class="btn-primary"   id="downloadPng"  type="button">Download PNG</button>
+    <button class="btn-secondary" id="downloadWebp" type="button">Download WebP</button>
+  </div>
+
+</div>
+
+<script src="triangle-image-fitter.js"></script>
+</body>
+</html>
