@@ -15,6 +15,16 @@
   box-sizing: border-box;
 }
 
+/* Remove browser-default border/padding from replaced elements */
+fieldset {
+  border: none;
+  padding: 0;
+}
+
+figure {
+  margin: 0;
+}
+
 /* ── Base ──────────────────────────────────────────────────────────────────── */
 body {
   font-family: 'DM Sans', sans-serif;
@@ -118,7 +128,10 @@ h1 {
   border-radius: 10px;
 }
 
-.control-group label {
+/* Matches both the <label> in the size control-group and the <legend>
+   in the triangle direction fieldset */
+.control-group label,
+.control-group legend {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
@@ -136,6 +149,48 @@ input[type="number"] {
 
 input[type="number"] {
   width: 70px;
+  text-align: center;
+}
+
+/* ── Range slider ──────────────────────────────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 4px;
+  background: var(--accent2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+}
+
+output {
+  font-size: 0.85rem;
+  color: var(--text);
+  min-width: 40px;
   text-align: center;
 }
 
@@ -174,6 +229,11 @@ button {
 
 .btn-secondary:hover {
   background: #1a4a80;
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 0.8rem;
 }
 
 /* ── Triangle direction picker ─────────────────────────────────────────────── */
@@ -242,7 +302,7 @@ button {
   max-width: 460px;
 }
 
-.preview-card h3 {
+.preview-card figcaption {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -257,6 +317,10 @@ button {
   /* Checkerboard shows transparency */
   background: repeating-conic-gradient(#2a2a4a 0% 25%, #222244 0% 50%) 50% / 16px 16px;
 }
+
+/* Canvas cursor states — classes toggled by JS */
+#resultCanvas.grabbable  { cursor: grab; }
+#resultCanvas.dragging   { cursor: grabbing; }
 
 .info-bar {
   margin-top: 10px;
