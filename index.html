@@ -69,13 +69,23 @@
       <button class="btn-secondary btn-sm" id="resetBtn" type="button">Reset</button>
     </div>
 
+    <div class="control-group hidden" id="cropControl">
+      <label>Crop &amp; Resize</label>
+      <button class="btn-secondary btn-sm" id="toggleCrop"  type="button">Select Region</button>
+      <button class="btn-primary   btn-sm hidden" id="applyCrop"  type="button">Apply Crop</button>
+      <button class="btn-secondary btn-sm hidden" id="resetCrop"  type="button">Reset Crop</button>
+    </div>
+
   </section>
 
   <section class="preview-area hidden" id="previewArea">
 
     <figure class="preview-card">
       <figcaption>Original</figcaption>
-      <img id="originalPreview" alt="Original image preview">
+      <div class="img-crop-wrap">
+        <img id="originalPreview" alt="Original image preview">
+        <canvas id="cropCanvas"></canvas>
+      </div>
       <p class="info-bar" id="originalInfo"></p>
     </figure>
 

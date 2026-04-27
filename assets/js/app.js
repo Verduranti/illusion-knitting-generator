@@ -52,6 +52,11 @@ const C_DARK_GREY = [64,  64,  64 ];
   const zoomLabel       = document.getElementById('zoomLabel');
   const resetBtn        = document.getElementById('resetBtn');
   const downloadPdfBtn  = document.getElementById('downloadPdf');
+  const cropCanvas      = document.getElementById('cropCanvas');
+  const cropControl     = document.getElementById('cropControl');
+  const toggleCropBtn   = document.getElementById('toggleCrop');
+  const applyCropBtn    = document.getElementById('applyCrop');
+  const resetCropBtn    = document.getElementById('resetCrop');
 
   // ── State ───────────────────────────────────────────────────────────────────
   let loadedImage = null;
@@ -59,6 +64,15 @@ const C_DARK_GREY = [64,  64,  64 ];
   let zoom        = 1.0;
   let panX        = 0;
   let panY        = 0;
+
+  // ── Crop state ──────────────────────────────────────────────────────────────
+  let cropMode         = false;
+  let cropRect         = null;   // interactive rect in IMAGE pixels {x,y,w,h}
+  let appliedCrop      = null;   // confirmed crop rect (null = full image)
+  let cropIsDragging   = false;
+  let cropHandle       = null;   // 'tl'|'tr'|'bl'|'br' or null (drawing new rect)
+  let cropDragStart    = { x: 0, y: 0 };  // image-pixel mouse pos at drag start
+  let cropRectStart    = null;             // cropRect snapshot at drag start
 
   // ── Triangle direction picker ───────────────────────────────────────────────
   triOptions.addEventListener('click', (e) => {
@@ -179,6 +193,24 @@ const C_DARK_GREY = [64,  64,  64 ];
         zoomSlider.value      = '1';
         zoomLabel.textContent = '100%';
         zoomControl.classList.remove('hidden');
+
+        // Size the crop canvas to the image (capped at 1600 px on the long side
+        // so we don't allocate a huge buffer for large photos).
+        const CAP   = 1600;
+        const csCap = Math.min(1, CAP / Math.max(img.width, img.height));
+        cropCanvas.width  = Math.round(img.width  * csCap);
+        cropCanvas.height = Math.round(img.height * csCap);
+
+        // Reset any previous crop
+        appliedCrop  = null;
+        cropRect     = null;
+        cropMode     = false;
+        cropCanvas.style.display = 'none';
+        toggleCropBtn.textContent = 'Select Region';
+        applyCropBtn.classList.add('hidden');
+        resetCropBtn.classList.add('hidden');
+        cropControl.classList.remove('hidden');
+
         render();
       };
       img.src = e.target.result;
@@ -205,17 +237,27 @@ const C_DARK_GREY = [64,  64,  64 ];
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, W, H);
 
-    const imgAspect    = loadedImage.width  / loadedImage.height;
+    // Source region: use applied crop or the full image
+    const srcX = appliedCrop ? appliedCrop.x : 0;
+    const srcY = appliedCrop ? appliedCrop.y : 0;
+    const srcW = appliedCrop ? appliedCrop.w : loadedImage.width;
+    const srcH = appliedCrop ? appliedCrop.h : loadedImage.height;
+
+    const imgAspect    = srcW / srcH;
     const canvasAspect = W / H;
     let baseW, baseH;
     if (imgAspect > canvasAspect) {
-      baseH = H; baseW = loadedImage.width * (H / loadedImage.height);
+      baseH = H; baseW = srcW * (H / srcH);
     } else {
-      baseW = W; baseH = loadedImage.height * (W / loadedImage.width);
+      baseW = W; baseH = srcH * (W / srcW);
     }
     const drawW = baseW * zoom;
     const drawH = baseH * zoom;
-    ctx.drawImage(loadedImage, (W - drawW) / 2 + panX, (H - drawH) / 2 + panY, drawW, drawH);
+    ctx.drawImage(
+      loadedImage,
+      srcX, srcY, srcW, srcH,
+      (W - drawW) / 2 + panX, (H - drawH) / 2 + panY, drawW, drawH
+    );
     return c;
   }
 
@@ -336,6 +378,213 @@ const C_DARK_GREY = [64,  64,  64 ];
     previewArea.classList.remove('hidden');
     downloadArea.classList.remove('hidden');
   }
+
+  // ── Crop helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Converts a mouse event position to original image pixel coordinates.
+   * @param {MouseEvent} e
+   * @returns {{ x: number, y: number }}
+   */
+  function getImageCoords(e) {
+    const r = cropCanvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(loadedImage.width,  (e.clientX - r.left) / r.width  * loadedImage.width)),
+      y: Math.max(0, Math.min(loadedImage.height, (e.clientY - r.top)  / r.height * loadedImage.height)),
+    };
+  }
+
+  /**
+   * Returns which corner handle (if any) the given image-pixel point is near.
+   * @param {number} imgX
+   * @param {number} imgY
+   * @returns {string|null}  'tl'|'tr'|'bl'|'br' or null
+   */
+  function getHitHandle(imgX, imgY) {
+    if (!cropRect) return null;
+    const { x, y, w, h } = cropRect;
+    // Convert 14 display pixels to image pixels for the hit radius
+    const r = cropCanvas.getBoundingClientRect();
+    const hitR = 14 * (loadedImage.width / r.width);
+    for (const [name, [hx, hy]] of [
+      ['tl', [x, y]], ['tr', [x + w, y]],
+      ['bl', [x, y + h]], ['br', [x + w, y + h]],
+    ]) {
+      if (Math.abs(imgX - hx) <= hitR && Math.abs(imgY - hy) <= hitR) return name;
+    }
+    return null;
+  }
+
+  /**
+   * Redraws the crop rectangle overlay (darkened surround + border +
+   * rule-of-thirds grid + corner handles), or clears it if no cropRect.
+   */
+  function drawCropOverlay() {
+    const ctx = cropCanvas.getContext('2d');
+    const cw = cropCanvas.width, ch = cropCanvas.height;
+    ctx.clearRect(0, 0, cw, ch);
+    if (!cropRect) return;
+
+    // Helpers: image pixels → canvas pixels
+    const cx = (ix) => ix * cw / loadedImage.width;
+    const cy = (iy) => iy * ch / loadedImage.height;
+
+    const { x, y, w, h } = cropRect;
+    const rx = cx(x), ry = cy(y), rw = cx(w), rh = cy(h);
+
+    // Darken outside the crop rect (even-odd fill cuts out the crop region)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.rect(0, 0, cw, ch);
+    ctx.rect(rx, ry, rw, rh);
+    ctx.fill('evenodd');
+
+    // Rule-of-thirds grid
+    ctx.strokeStyle = 'rgba(233,69,96,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(rx + rw / 3,     ry);      ctx.lineTo(rx + rw / 3,     ry + rh);
+    ctx.moveTo(rx + 2 * rw / 3, ry);      ctx.lineTo(rx + 2 * rw / 3, ry + rh);
+    ctx.moveTo(rx,     ry + rh / 3);      ctx.lineTo(rx + rw, ry + rh / 3);
+    ctx.moveTo(rx,     ry + 2 * rh / 3);  ctx.lineTo(rx + rw, ry + 2 * rh / 3);
+    ctx.stroke();
+
+    // Crop border
+    ctx.strokeStyle = '#e94560';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
+
+    // Corner handles (filled squares)
+    const HS = 8;
+    ctx.fillStyle = '#e94560';
+    for (const [hx, hy] of [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]]) {
+      ctx.fillRect(hx - HS, hy - HS, HS * 2, HS * 2);
+    }
+  }
+
+  // ── Crop canvas mouse events ──────────────────────────────────────────────────
+
+  cropCanvas.addEventListener('mousedown', (e) => {
+    if (!cropMode) return;
+    e.preventDefault();
+    const { x, y } = getImageCoords(e);
+    cropHandle      = getHitHandle(x, y);
+    cropDragStart   = { x, y };
+    cropRectStart   = cropRect ? { ...cropRect } : null;
+    cropIsDragging  = true;
+
+    if (!cropHandle) {
+      // Start drawing a new crop rect from scratch
+      cropRect = { x, y, w: 0, h: 0 };
+    }
+  });
+
+  cropCanvas.addEventListener('mousemove', (e) => {
+    if (!cropMode) return;
+    const { x: mx, y: my } = getImageCoords(e);
+
+    // Update cursor to signal which handle is hovered
+    if (!cropIsDragging) {
+      const handle = getHitHandle(mx, my);
+      const cursors = { tl: 'nwse-resize', tr: 'nesw-resize', bl: 'nesw-resize', br: 'nwse-resize' };
+      cropCanvas.style.cursor = handle ? cursors[handle] : 'crosshair';
+      return;
+    }
+
+    if (cropHandle && cropRectStart) {
+      // Resize an existing rect by dragging a corner.
+      // Anchor is the opposite corner so the rect can "flip" naturally.
+      const { x: sx, y: sy, w: sw, h: sh } = cropRectStart;
+      const anchorX = cropHandle.includes('l') ? sx + sw : sx;
+      const anchorY = cropHandle.includes('t') ? sy + sh : sy;
+      const clampX  = Math.max(0, Math.min(mx, loadedImage.width));
+      const clampY  = Math.max(0, Math.min(my, loadedImage.height));
+      cropRect = {
+        x: Math.min(clampX, anchorX),
+        y: Math.min(clampY, anchorY),
+        w: Math.abs(clampX - anchorX),
+        h: Math.abs(clampY - anchorY),
+      };
+    } else {
+      // Draw new rect — allow any drag direction
+      const x0 = cropDragStart.x, y0 = cropDragStart.y;
+      cropRect = {
+        x: Math.min(x0, mx),
+        y: Math.min(y0, my),
+        w: Math.min(Math.abs(mx - x0), loadedImage.width),
+        h: Math.min(Math.abs(my - y0), loadedImage.height),
+      };
+    }
+    drawCropOverlay();
+  });
+
+  cropCanvas.addEventListener('mouseup', () => {
+    cropIsDragging = false;
+    cropHandle     = null;
+    // Discard tiny accidental selections
+    if (cropRect && (cropRect.w < 4 || cropRect.h < 4)) {
+      cropRect = null;
+      drawCropOverlay();
+    }
+  });
+
+  document.addEventListener('mouseup', () => { cropIsDragging = false; });
+
+  // ── Crop buttons ──────────────────────────────────────────────────────────────
+
+  toggleCropBtn.addEventListener('click', () => {
+    cropMode = !cropMode;
+    cropCanvas.style.display = cropMode ? 'block' : 'none';
+
+    if (cropMode) {
+      toggleCropBtn.textContent = 'Cancel';
+      applyCropBtn.classList.remove('hidden');
+      // Initialise the overlay to the currently applied crop (or full image)
+      cropRect = appliedCrop
+        ? { ...appliedCrop }
+        : { x: 0, y: 0, w: loadedImage.width, h: loadedImage.height };
+      drawCropOverlay();
+    } else {
+      // Cancelled — revert overlay visuals
+      toggleCropBtn.textContent = 'Select Region';
+      applyCropBtn.classList.add('hidden');
+      cropRect = null;
+      drawCropOverlay();
+    }
+  });
+
+  applyCropBtn.addEventListener('click', () => {
+    if (cropRect && cropRect.w > 4 && cropRect.h > 4) {
+      appliedCrop = { ...cropRect };
+      // Reset zoom/pan so the newly cropped region fills the output cleanly
+      zoom = 1.0; panX = 0; panY = 0;
+      zoomSlider.value      = '1';
+      zoomLabel.textContent = '100%';
+      render();
+    }
+    cropMode = false;
+    cropCanvas.style.display = 'none';
+    toggleCropBtn.textContent = 'Select Region';
+    applyCropBtn.classList.add('hidden');
+    resetCropBtn.classList.toggle('hidden', !appliedCrop);
+    cropRect = null;
+    drawCropOverlay();
+  });
+
+  resetCropBtn.addEventListener('click', () => {
+    appliedCrop = null;
+    cropRect    = null;
+    cropMode    = false;
+    cropCanvas.style.display = 'none';
+    toggleCropBtn.textContent = 'Select Region';
+    applyCropBtn.classList.add('hidden');
+    resetCropBtn.classList.add('hidden');
+    zoom = 1.0; panX = 0; panY = 0;
+    zoomSlider.value      = '1';
+    zoomLabel.textContent = '100%';
+    drawCropOverlay();
+    render();
+  });
 
   // ── PDF chart ────────────────────────────────────────────────────────────────
 
