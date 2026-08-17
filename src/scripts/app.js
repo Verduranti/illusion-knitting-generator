@@ -35,7 +35,7 @@ const C_GREY      = [200, 200, 200];
 const C_DARK_GREY = [64,  64,  64 ];
 
 (function () {
-  'use strict';
+'use strict';
 
   // ── Element references ──────────────────────────────────────────────────────
   const dropZone        = document.getElementById('dropZone');
@@ -233,8 +233,10 @@ const C_DARK_GREY = [64,  64,  64 ];
         loadedImage = img;
         originalPreview.src = e.target.result;
         originalInfo.textContent = `${img.width} × ${img.height}px`;
-        dropZone.querySelector('p').innerHTML =
-          `<strong>${file.name}</strong> loaded ✓`;
+        const dropTitle = dropZone.querySelector('.drop-copy strong');
+        const dropHint  = dropZone.querySelector('.drop-copy small');
+        if (dropTitle) dropTitle.textContent = file.name;
+        if (dropHint) dropHint.textContent = 'loaded ✓ · choose another image anytime';
         zoom = 1.0; panX = 0; panY = 0;
         zoomSlider.value      = '1';
         zoomLabel.textContent = '100%';

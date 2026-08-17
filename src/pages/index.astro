@@ -1,0 +1,191 @@
+---
+import "../styles/styles.css";
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Turn an image into a downloadable shadow-knitting chart.">
+  <title>Shadow Knitting Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<nav class="site-nav" aria-label="Primary navigation">
+  <a class="brand" href="https://www.glasswalker.dev" aria-label="Glasswalker.dev home">
+    <span class="brand-mark">GWD</span>
+    <span>glasswalker<span>.dev</span></span>
+  </a>
+  <div class="nav-meta">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span>project_02 / shadow knitting</span>
+  </div>
+  <a class="nav-link" href="https://www.glasswalker.dev/#projects">all projects ↗</a>
+</nav>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    ★ image in · knitting pattern out &nbsp;&nbsp; no account · no upload · no nonsense &nbsp;&nbsp; angle-dependent textile wizardry &nbsp;&nbsp;
+    ★ image in · knitting pattern out &nbsp;&nbsp; no account · no upload · no nonsense &nbsp;&nbsp; angle-dependent textile wizardry &nbsp;&nbsp;
+  </div>
+</div>
+
+<header class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">// browser-based pattern generator</p>
+    <h1>Make an image<br><span>hide in plain sight.</span></h1>
+    <p class="subtitle">Turn any picture into an illusion-knitting chart. Choose a shape, frame the image, then download a pattern ready for yarn.</p>
+    <div class="hero-badges" aria-label="Project features">
+      <span>100% local</span>
+      <span>no sign-up</span>
+      <span>PNG · WEBP · PDF</span>
+    </div>
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <div class="knit-card knit-card-back"></div>
+    <div class="knit-card knit-card-front">
+      <div class="knit-lines"></div>
+      <span>look at it<br>sideways →</span>
+    </div>
+  </div>
+</header>
+
+<main class="app-shell">
+  <section class="tool-section upload-section" aria-labelledby="upload-heading">
+    <div class="step-heading">
+      <span class="step-number">01</span>
+      <div>
+        <p class="section-kicker">// start here</p>
+        <h2 id="upload-heading">Pick your image</h2>
+      </div>
+    </div>
+
+    <label class="drop-zone" id="dropZone" for="fileInput">
+      <span class="upload-icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+        </svg>
+      </span>
+      <span class="drop-copy"><strong>Drop an image here</strong><small>or click to browse your files</small></span>
+      <span class="browse-button">choose file →</span>
+      <input type="file" id="fileInput" accept="image/*">
+    </label>
+  </section>
+
+  <section class="tool-section settings-section" aria-labelledby="settings-heading">
+    <div class="step-heading">
+      <span class="step-number mint">02</span>
+      <div>
+        <p class="section-kicker">// choose the canvas</p>
+        <h2 id="settings-heading">Set the shape</h2>
+      </div>
+    </div>
+
+    <div class="controls">
+      <fieldset class="control-group shape-group">
+        <legend>finished piece</legend>
+        <div class="shape-options" id="shapeOptions">
+          <button class="shape-option active" data-shape="tri_down" title="Triangular shawl — point down" type="button">
+            <svg viewBox="0 0 44 24" aria-hidden="true"><polygon points="1,1 43,1 22,23" fill="none" stroke-width="2"/></svg>
+            <span>shawl</span>
+          </button>
+          <button class="shape-option" data-shape="right_tri_l" title="Half shawl — left lean" type="button">
+            <svg viewBox="0 0 44 24" aria-hidden="true"><polygon points="1,1 43,1 1,23" fill="none" stroke-width="2"/></svg>
+            <span>half / left</span>
+          </button>
+          <button class="shape-option" data-shape="right_tri_r" title="Half shawl — right lean" type="button">
+            <svg viewBox="0 0 44 24" aria-hidden="true"><polygon points="1,1 43,1 43,23" fill="none" stroke-width="2"/></svg>
+            <span>half / right</span>
+          </button>
+          <button class="shape-option" data-shape="rect" title="Scarf or blanket — full rectangle" type="button">
+            <svg viewBox="0 0 44 24" aria-hidden="true"><rect x="1" y="1" width="42" height="22" fill="none" stroke-width="2"/></svg>
+            <span>scarf</span>
+          </button>
+          <button class="shape-option" data-shape="trapezoid" title="Trapezoid — shaped scarf or shawlette" type="button">
+            <svg viewBox="0 0 44 24" aria-hidden="true"><polygon points="9,1 35,1 43,23 1,23" fill="none" stroke-width="2"/></svg>
+            <span>trapezoid</span>
+          </button>
+        </div>
+      </fieldset>
+
+      <div class="control-group hidden" id="zoomControl">
+        <label for="zoomSlider">zoom</label>
+        <input type="range" id="zoomSlider" min="0.5" max="3" step="0.01" value="1">
+        <output id="zoomLabel" for="zoomSlider">100%</output>
+        <button class="btn-secondary btn-sm" id="resetBtn" type="button">reset</button>
+      </div>
+
+      <div class="control-group hidden" id="detectionControl">
+        <span class="control-label">detection</span>
+        <div class="segmented-control">
+          <button class="det-option active" id="detOutline" type="button">outline</button>
+          <button class="det-option" id="detFill" type="button">fill</button>
+        </div>
+      </div>
+
+      <div class="control-group hidden" id="cropControl">
+        <span class="control-label">crop &amp; resize</span>
+        <button class="btn-secondary btn-sm" id="toggleCrop" type="button">select region</button>
+        <button class="btn-primary btn-sm hidden" id="applyCrop" type="button">apply crop</button>
+        <button class="btn-secondary btn-sm hidden" id="resetCrop" type="button">reset crop</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="tool-section output-section hidden" id="previewArea" aria-labelledby="preview-heading">
+    <div class="step-heading output-heading">
+      <span class="step-number blue">03</span>
+      <div>
+        <p class="section-kicker">// fine-tune and export</p>
+        <h2 id="preview-heading">Make the pattern</h2>
+      </div>
+    </div>
+
+    <div class="preview-area">
+      <figure class="preview-card">
+        <figcaption><span>input</span> original image</figcaption>
+        <div class="media-frame">
+          <div class="img-crop-wrap">
+            <img id="originalPreview" alt="Original image preview">
+            <canvas id="cropCanvas"></canvas>
+          </div>
+        </div>
+        <p class="info-bar" id="originalInfo"></p>
+      </figure>
+
+      <figure class="preview-card result-card">
+        <figcaption><span>output</span> drag to reposition</figcaption>
+        <div class="media-frame result-frame">
+          <canvas id="resultCanvas"></canvas>
+        </div>
+        <p class="info-bar" id="resultInfo"></p>
+      </figure>
+    </div>
+
+    <div class="download-panel hidden" id="downloadArea">
+      <div>
+        <strong>pattern ready.</strong>
+        <span>pick your preferred format →</span>
+      </div>
+      <div class="download-actions">
+        <button class="btn-primary" id="downloadPng" type="button">download PNG</button>
+        <button class="btn-secondary" id="downloadWebp" type="button">download WEBP</button>
+        <button class="btn-secondary" id="downloadPdf" type="button">download chart PDF</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>built by <a href="https://www.glasswalker.dev">glasswalker.dev ↗</a></span>
+  <span>the image never leaves your browser.</span>
+</footer>
+
+<script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="../scripts/app.js"></script>
+</body>
+</html>
