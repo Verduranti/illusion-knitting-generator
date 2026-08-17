@@ -46,24 +46,69 @@ const C_DARK_GREY = [64,  64,  64 ];
   const resultCanvas    = document.getElementById('resultCanvas');
   const originalInfo    = document.getElementById('originalInfo');
   const resultInfo      = document.getElementById('resultInfo');
-  const triOptions      = document.getElementById('triOptions');
   const zoomControl     = document.getElementById('zoomControl');
   const zoomSlider      = document.getElementById('zoomSlider');
   const zoomLabel       = document.getElementById('zoomLabel');
   const resetBtn        = document.getElementById('resetBtn');
   const downloadPdfBtn  = document.getElementById('downloadPdf');
+  const detectionControl = document.getElementById('detectionControl');
+  const detOutlineBtn    = document.getElementById('detOutline');
+  const detFillBtn       = document.getElementById('detFill');
   const cropCanvas      = document.getElementById('cropCanvas');
   const cropControl     = document.getElementById('cropControl');
   const toggleCropBtn   = document.getElementById('toggleCrop');
   const applyCropBtn    = document.getElementById('applyCrop');
   const resetCropBtn    = document.getElementById('resetCrop');
 
+  // ── Shape definitions ────────────────────────────────────────────────────────
+  // Each shape carries:
+  //   w, h  — canvas dimensions for this shape in pixels (stitches × rows)
+  //   verts — function (W, H) → [[x,y], …] clip-path vertices in canvas pixels
+  const HALF_W = Math.ceil(OUTPUT_W / 2);  // 226 — half the full shawl width
+  const SHAPES = {
+    tri_down:    { w: OUTPUT_W, h: OUTPUT_H, verts: (W, H) => [[0, 0], [W, 0], [W / 2, H]] },
+    right_tri_l: { w: HALF_W,  h: OUTPUT_H, verts: (W, H) => [[0, 0], [W, 0], [0, H]] },
+    right_tri_r: { w: HALF_W,  h: OUTPUT_H, verts: (W, H) => [[0, 0], [W, 0], [W, H]] },
+    rect:        { w: OUTPUT_W, h: 101,      verts: (W, H) => [[0, 0], [W, 0], [W, H], [0, H]] },
+    trapezoid:   { w: OUTPUT_W, h: OUTPUT_H, verts: (W, H) => [[0, 0], [W, 0], [W * 0.8, H], [W * 0.2, H]] },
+  };
+
+  /** Returns the canvas dimensions for the active shape. */
+  function getShapeSize() {
+    const s = SHAPES[currentShape];
+    return { W: s.w, H: s.h };
+  }
+
+  /** Returns the vertex array for the current shape in output-canvas coordinates. */
+  function getShapeVertices(W, H) {
+    return SHAPES[currentShape].verts(W, H);
+  }
+
   // ── State ───────────────────────────────────────────────────────────────────
-  let loadedImage = null;
-  let currentDir  = 'up';
-  let zoom        = 1.0;
-  let panX        = 0;
-  let panY        = 0;
+  let loadedImage  = null;
+  let currentShape = 'tri_down';
+  let zoom         = 1.0;
+  let panX         = 0;
+  let panY         = 0;
+
+  // ── Detection mode ('edge' | 'fill') ────────────────────────────────────────
+  let detectionMode = 'edge';
+
+  detOutlineBtn.addEventListener('click', () => {
+    if (detectionMode === 'edge') return;
+    detectionMode = 'edge';
+    detOutlineBtn.classList.add('active');
+    detFillBtn.classList.remove('active');
+    render();
+  });
+
+  detFillBtn.addEventListener('click', () => {
+    if (detectionMode === 'fill') return;
+    detectionMode = 'fill';
+    detFillBtn.classList.add('active');
+    detOutlineBtn.classList.remove('active');
+    render();
+  });
 
   // ── Crop state ──────────────────────────────────────────────────────────────
   let cropMode         = false;
@@ -74,13 +119,14 @@ const C_DARK_GREY = [64,  64,  64 ];
   let cropDragStart    = { x: 0, y: 0 };  // image-pixel mouse pos at drag start
   let cropRectStart    = null;             // cropRect snapshot at drag start
 
-  // ── Triangle direction picker ───────────────────────────────────────────────
-  triOptions.addEventListener('click', (e) => {
-    const btn = e.target.closest('.tri-option');
+  // ── Shape picker ─────────────────────────────────────────────────────────────
+  const shapeOptions = document.getElementById('shapeOptions');
+  shapeOptions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.shape-option');
     if (!btn) return;
-    triOptions.querySelectorAll('.tri-option').forEach((b) => b.classList.remove('active'));
+    shapeOptions.querySelectorAll('.shape-option').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
-    currentDir = btn.dataset.dir;
+    currentShape = btn.dataset.shape;
     render();
   });
 
@@ -193,6 +239,7 @@ const C_DARK_GREY = [64,  64,  64 ];
         zoomSlider.value      = '1';
         zoomLabel.textContent = '100%';
         zoomControl.classList.remove('hidden');
+        detectionControl.classList.remove('hidden');
 
         // Size the crop canvas to the image (capped at 1600 px on the long side
         // so we don't allocate a huge buffer for large photos).
@@ -221,14 +268,14 @@ const C_DARK_GREY = [64,  64,  64 ];
   // ── Shared image-positioning helper ─────────────────────────────────────────
 
   /**
-   * Creates an offscreen canvas (OUTPUT_W × OUTPUT_H) with the loaded image
+   * Creates an offscreen canvas sized to the active shape with the loaded image
    * drawn at the current zoom/pan. The canvas is pre-filled with mid-grey so
    * uncovered areas don't generate false Sobel edges at the image boundary.
    *
    * @returns {HTMLCanvasElement}
    */
   function createSourceCanvas() {
-    const W = OUTPUT_W, H = OUTPUT_H;
+    const { W, H } = getShapeSize();
     const c   = document.createElement('canvas');
     c.width   = W;
     c.height  = H;
@@ -297,6 +344,31 @@ const C_DARK_GREY = [64,  64,  64 ];
   }
 
   /**
+   * Luminance-threshold mask for vector / flat-colour art.
+   * Pixels darker than the threshold are treated as "filled" (mask = 1).
+   * No neighbour look-up needed — works per-pixel.
+   *
+   * @param   {ImageData} imageData
+   * @returns {Uint8Array}
+   */
+  function computeFillMask(imageData) {
+    const { width: w, height: h, data } = imageData;
+    const mask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const lum = (0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]) | 0;
+      mask[i] = lum < 128 ? 1 : 0;
+    }
+    return mask;
+  }
+
+  /** Chooses the correct mask function based on the current detectionMode. */
+  function computeMask(imageData) {
+    return detectionMode === 'fill'
+      ? computeFillMask(imageData)
+      : computeEdgeMask(imageData);
+  }
+
+  /**
    * Builds an ImageData with the striped-outline effect.
    *
    * Stripes are 1-indexed right-to-left (stripe 1 = rightmost column group).
@@ -337,13 +409,13 @@ const C_DARK_GREY = [64,  64,  64 ];
   function render() {
     if (!loadedImage) return;
 
-    const W = OUTPUT_W, H = OUTPUT_H;
+    const { W, H } = getShapeSize();
 
     // ① Source canvas — zoomed/panned image, no clip
     const srcCanvas = createSourceCanvas();
 
     // ② Sobel edge detection
-    const edgeMask = computeEdgeMask(srcCanvas.getContext('2d').getImageData(0, 0, W, H));
+    const edgeMask = computeMask(srcCanvas.getContext('2d').getImageData(0, 0, W, H));
 
     // ③ Stripe ImageData
     const stripeData = buildStripeImageData(edgeMask, W, H);
@@ -362,13 +434,10 @@ const C_DARK_GREY = [64,  64,  64 ];
     const ctx = resultCanvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
+    const clipVerts = getShapeVertices(W, H);
     ctx.beginPath();
-    switch (currentDir) {
-      case 'up':    ctx.moveTo(W / 2, 0); ctx.lineTo(W, H);     ctx.lineTo(0, H);     break;
-      case 'down':  ctx.moveTo(0, 0);     ctx.lineTo(W, 0);     ctx.lineTo(W / 2, H); break;
-      case 'left':  ctx.moveTo(0, H / 2); ctx.lineTo(W, 0);     ctx.lineTo(W, H);     break;
-      case 'right': ctx.moveTo(W, H / 2); ctx.lineTo(0, 0);     ctx.lineTo(0, H);     break;
-    }
+    ctx.moveTo(clipVerts[0][0], clipVerts[0][1]);
+    for (let i = 1; i < clipVerts.length; i++) ctx.lineTo(clipVerts[i][0], clipVerts[i][1]);
     ctx.closePath();
     ctx.clip();
     ctx.drawImage(stripeCanvas, 0, 0);
@@ -450,13 +519,13 @@ const C_DARK_GREY = [64,  64,  64 ];
     ctx.stroke();
 
     // Crop border
-    ctx.strokeStyle = '#e94560';
+    ctx.strokeStyle = '#7c3aed';
     ctx.lineWidth = 2;
     ctx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
 
     // Corner handles (filled squares)
     const HS = 8;
-    ctx.fillStyle = '#e94560';
+    ctx.fillStyle = '#7c3aed';
     for (const [hx, hy] of [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]]) {
       ctx.fillRect(hx - HS, hy - HS, HS * 2, HS * 2);
     }
@@ -591,8 +660,8 @@ const C_DARK_GREY = [64,  64,  64 ];
   /**
    * Renders a vertical slice of the knitting chart (columns colStart–colEnd,
    * all OUTPUT_H rows) to an offscreen canvas at CHART_CELL px per stitch.
-   * Cells and grid lines are clipped to the triangle so nothing is drawn
-   * outside the triangle boundary.  The triangle border is then drawn on top.
+   * Only cells whose centre lies inside the active shape are drawn, producing
+   * a staircase boundary instead of a smooth clipped edge.
    *
    * Layout
    * ──────
@@ -602,17 +671,17 @@ const C_DARK_GREY = [64,  64,  64 ];
    *
    * Grid lines
    * ──────────
-   *  Thin  (0.5 px, #bbb) — every stitch  (clipped to triangle)
-   *  Thick (2 px,   #444) — every 10 stitches + outer border  (clipped)
+   *  Thin  (0.5 px, #bbb) — edges shared between two in-shape cells
+   *  Thick (1.5 px, #444) — edges at ×10 boundaries OR adjacent to empty space
    *
-   * @param   {ImageData} stripeData  Full 451×225 stripe ImageData
+   * @param   {ImageData} stripeData  Full stripe ImageData (dimensions match active shape)
    * @param   {number}    colStart    First column index (0-based, inclusive)
    * @param   {number}    colEnd      Last  column index (0-based, exclusive)
    * @returns {HTMLCanvasElement}
    */
   function drawChartPage(stripeData, colStart, colEnd) {
-    const W        = OUTPUT_W;
-    const H        = OUTPUT_H;
+    const W        = stripeData.width;
+    const H        = stripeData.height;
     const numCols  = colEnd - colStart;
     const C        = CHART_CELL;
     const PAD_LEFT = 44;   // px — wide enough for 3-digit row labels
@@ -630,86 +699,110 @@ const C_DARK_GREY = [64,  64,  64 ];
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, cw, ch);
 
-    // ── Triangle clip path in chart-canvas coordinates ───────────────────────
-    // Image space (col, row) → canvas (PAD_LEFT + (col-colStart)*C, PAD_TOP + row*C)
-    const toX = (col) => PAD_LEFT + (col - colStart) * C;
-    const toY = (row) => PAD_TOP  + row * C;
-    const verts = {
-      up:    [[toX(W / 2), toY(0)],     [toX(W), toY(H)], [toX(0),     toY(H)]],
-      down:  [[toX(0),     toY(0)],     [toX(W), toY(0)], [toX(W / 2), toY(H)]],
-      left:  [[toX(0),     toY(H / 2)], [toX(W), toY(0)], [toX(W),     toY(H)]],
-      right: [[toX(W),     toY(H / 2)], [toX(0), toY(0)], [toX(0),     toY(H)]],
-    }[currentDir];
+    // ── Shape membership test (per-cell, produces staircase boundary) ────────
+    // Tests whether a point (px, py) in OUTPUT-canvas pixel space lies inside
+    // the current shape (convex polygon), using the cross-product sign method.
+    const shapeVertsOut = getShapeVertices(W, H);   // vertices in output-canvas space
+    function inShape(col, row) {
+      // Test the cell centre against the polygon using cross-product sign method.
+      const ptx = col + 0.5;
+      const pty = row + 0.5;
+      const n   = shapeVertsOut.length;
+      let sign  = 0;
+      for (let i = 0; i < n; i++) {
+        const [ax, ay] = shapeVertsOut[i];
+        const [bx, by] = shapeVertsOut[(i + 1) % n];
+        const cross = (bx - ax) * (pty - ay) - (by - ay) * (ptx - ax);
+        if (cross === 0) continue;
+        const s = cross > 0 ? 1 : -1;
+        if (sign === 0) { sign = s; }
+        else if (s !== sign) return false;
+      }
+      return true;
+    }
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(verts[0][0], verts[0][1]);
-    ctx.lineTo(verts[1][0], verts[1][1]);
-    ctx.lineTo(verts[2][0], verts[2][1]);
-    ctx.closePath();
-    ctx.clip();  // everything below is clipped to the triangle
-
-    // ── Chart cells ──────────────────────────────────────────────────────────
+    // ── Chart cells (only draw cells inside the shape) ────────────────────────
     const px = stripeData.data;
     for (let row = 0; row < H; row++) {
       for (let col = colStart; col < colEnd; col++) {
+        if (!inShape(col, row)) continue;
         const pi = (row * W + col) * 4;
         ctx.fillStyle = `rgb(${px[pi]},${px[pi + 1]},${px[pi + 2]})`;
         ctx.fillRect(PAD_LEFT + (col - colStart) * C, PAD_TOP + row * C, C, C);
       }
     }
 
-    // ── Thin grid lines (every stitch) ───────────────────────────────────────
+    // ── Grid lines — drawn per-cell so they respect the staircase boundary ────
+    // For every in-shape cell we draw whichever of its 4 edges need a line.
+    // Edge weight rules:
+    //   Thick (2 px, #444): edge aligns with a ×10 grid line OR the neighbour
+    //                        in that direction is outside the shape (boundary).
+    //   Thin  (0.5 px, #bbb): all other shared edges between two in-shape cells.
+    //
+    // We collect edges into two sets (thin / thick) to batch strokes.
+
+    const thinPaths  = [];   // [{x1,y1,x2,y2}, …]
+    const thickPaths = [];
+
+    for (let row = 0; row < H; row++) {
+      for (let col = colStart; col < colEnd; col++) {
+        if (!inShape(col, row)) continue;
+
+        const cx  = PAD_LEFT + (col - colStart) * C;
+        const cy  = PAD_TOP  + row * C;
+        const cx2 = cx + C;
+        const cy2 = cy + C;
+
+        // Absolute column/row for ×10 checks
+        const absCol = col;          // col is already absolute (colStart-based loop)
+        const absRow = row;
+
+        // Top edge
+        {
+          const neighbourIn = (row > 0) && inShape(col, row - 1);
+          const thick = (absRow % 10 === 0) || !neighbourIn;
+          (thick ? thickPaths : thinPaths).push([cx, cy, cx2, cy]);
+        }
+        // Bottom edge
+        {
+          const neighbourIn = (row < H - 1) && inShape(col, row + 1);
+          const thick = ((absRow + 1) % 10 === 0) || !neighbourIn;
+          (thick ? thickPaths : thinPaths).push([cx, cy2, cx2, cy2]);
+        }
+        // Left edge
+        {
+          // Neighbour is in-shape if it exists in the full output canvas
+          const neighbourIn = (col > 0) && inShape(col - 1, row);
+          const thick = (absCol % 10 === 0) || !neighbourIn;
+          (thick ? thickPaths : thinPaths).push([cx, cy, cx, cy2]);
+        }
+        // Right edge
+        {
+          const neighbourIn = (col < W - 1) && inShape(col + 1, row);
+          const thick = ((absCol + 1) % 10 === 0) || !neighbourIn;
+          (thick ? thickPaths : thinPaths).push([cx2, cy, cx2, cy2]);
+        }
+      }
+    }
+
+    // Draw thin lines
     ctx.strokeStyle = '#bbbbbb';
     ctx.lineWidth   = 0.5;
     ctx.beginPath();
-    for (let c = 0; c <= numCols; c++) {
-      const x = PAD_LEFT + c * C + 0.5;
-      ctx.moveTo(x, PAD_TOP);
-      ctx.lineTo(x, PAD_TOP + H * C);
-    }
-    for (let r = 0; r <= H; r++) {
-      const y = PAD_TOP + r * C + 0.5;
-      ctx.moveTo(PAD_LEFT,               y);
-      ctx.lineTo(PAD_LEFT + numCols * C, y);
+    for (const [x1, y1, x2, y2] of thinPaths) {
+      ctx.moveTo(x1 + 0.5, y1 + 0.5);
+      ctx.lineTo(x2 + 0.5, y2 + 0.5);
     }
     ctx.stroke();
 
-    // ── Thick grid lines (every 10 stitches + outer border) ─────────────────
+    // Draw thick lines
     ctx.strokeStyle = '#444444';
-    ctx.lineWidth   = 2;
-    ctx.beginPath();
-
-    // Vertical — every 10 absolute columns, plus left and right edges
-    for (let c = 0; c <= numCols; c++) {
-      const absCol = colStart + c;
-      if (absCol % 10 === 0 || c === 0 || c === numCols) {
-        const x = PAD_LEFT + c * C + 0.5;
-        ctx.moveTo(x, PAD_TOP);
-        ctx.lineTo(x, PAD_TOP + H * C);
-      }
-    }
-
-    // Horizontal — every 10 rows + top and bottom edges
-    for (let r = 0; r <= H; r++) {
-      if (r % 10 === 0 || r === H) {
-        const y = PAD_TOP + r * C + 0.5;
-        ctx.moveTo(PAD_LEFT,               y);
-        ctx.lineTo(PAD_LEFT + numCols * C, y);
-      }
-    }
-    ctx.stroke();
-
-    ctx.restore();  // lift triangle clip
-
-    // ── Triangle border (drawn after restore — always visible) ───────────────
-    ctx.strokeStyle = '#000000';
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
-    ctx.moveTo(verts[0][0], verts[0][1]);
-    ctx.lineTo(verts[1][0], verts[1][1]);
-    ctx.lineTo(verts[2][0], verts[2][1]);
-    ctx.closePath();
+    for (const [x1, y1, x2, y2] of thickPaths) {
+      ctx.moveTo(x1 + 0.5, y1 + 0.5);
+      ctx.lineTo(x2 + 0.5, y2 + 0.5);
+    }
     ctx.stroke();
 
     // ── Row numbers (left margin, every 10) ──────────────────────────────────
@@ -754,11 +847,11 @@ const C_DARK_GREY = [64,  64,  64 ];
   function downloadChartPdf() {
     if (!loadedImage) return;
 
-    const W = OUTPUT_W, H = OUTPUT_H;
+    const { W, H } = getShapeSize();
 
     // Build full-rectangle stripe data (triangle clip happens per page in drawChartPage)
     const srcCanvas  = createSourceCanvas();
-    const edgeMask   = computeEdgeMask(srcCanvas.getContext('2d').getImageData(0, 0, W, H));
+    const edgeMask   = computeMask(srcCanvas.getContext('2d').getImageData(0, 0, W, H));
     const stripeData = buildStripeImageData(edgeMask, W, H);
 
     const { jsPDF }  = window.jspdf;
